@@ -77,12 +77,6 @@ async function run() {
       }
     });
 
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
-
     // Get orders for a specific user by email
     app.get("/orders", async (req, res) => {
       const email = req.query.email; // fetch email from query params
@@ -102,6 +96,38 @@ async function run() {
         res.status(500).json({ message: "Internal Server Error" });
       }
     });
+
+    // Cancel order / Update order status
+    app.patch("/orders/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+
+      if (!status) {
+        return res.status(400).json({ message: "Status is required" });
+      }
+
+      try {
+        const result = await ordersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+
+        res.status(200).json({ message: "Order updated successfully" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     //await client.close();
