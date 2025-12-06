@@ -25,6 +25,27 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+
+    const db = client.db("book_courier_db");
+    const booksCollection = db.collection("books");
+
+    //parcel API
+    // app.get("/books", async (req, res) => {});
+    app.get("/books", async (req, res) => {
+      try {
+        const books = await booksCollection.find({}).toArray(); // get all books
+        res.status(200).json(books);
+      } catch (error) {
+        console.error("Error fetching books:", error);
+        res.status(500).send("Internal Server Error");
+      }
+    });
+
+    app.post("/books", async (req, res) => {
+      const book = req.body;
+      const result = await booksCollection.insertOne(book);
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
