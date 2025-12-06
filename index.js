@@ -97,26 +97,20 @@ async function run() {
       }
     });
 
-    // Cancel order / Update order status
-    app.patch("/orders/:id", async (req, res) => {
+    // Delete order when cancelling
+    app.delete("/orders/:id", async (req, res) => {
       const id = req.params.id;
-      const { status } = req.body;
-
-      if (!status) {
-        return res.status(400).json({ message: "Status is required" });
-      }
 
       try {
-        const result = await ordersCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status } }
-        );
+        const result = await ordersCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
 
-        if (result.matchedCount === 0) {
+        if (result.deletedCount === 0) {
           return res.status(404).json({ message: "Order not found" });
         }
 
-        res.status(200).json({ message: "Order updated successfully" });
+        res.status(200).json({ message: "Order deleted successfully" });
       } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Internal Server Error" });
