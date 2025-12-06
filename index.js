@@ -3,7 +3,7 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 //middleware
 
@@ -28,6 +28,7 @@ async function run() {
 
     const db = client.db("book_courier_db");
     const booksCollection = db.collection("books");
+    const ordersCollection = db.collection("orders");
 
     //parcel API
     // app.get("/books", async (req, res) => {});
@@ -46,6 +47,35 @@ async function run() {
       const result = await booksCollection.insertOne(book);
       res.send(result);
     });
+
+    // Get single book by ID
+    app.get("/books/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const book = await booksCollection.findOne({ _id: new ObjectId(id) });
+        if (!book) {
+          return res.status(404).json({ message: "Book not found" });
+        }
+        res.status(200).json(book);
+      } catch (error) {
+        console.error("Error fetching book:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+    //orders related API
+
+    app.post("/orders", async (req, res) => {
+      try {
+        const order = req.body;
+        const result = await ordersCollection.insertOne(order);
+        res.status(201).json(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to place order" });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
