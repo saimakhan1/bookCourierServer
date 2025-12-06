@@ -68,6 +68,7 @@ async function run() {
     app.post("/orders", async (req, res) => {
       try {
         const order = req.body;
+        order.orderDate = new Date();
         const result = await ordersCollection.insertOne(order);
         res.status(201).json(result);
       } catch (err) {
@@ -81,6 +82,26 @@ async function run() {
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
+
+    // Get orders for a specific user by email
+    app.get("/orders", async (req, res) => {
+      const email = req.query.email; // fetch email from query params
+      if (!email) {
+        return res
+          .status(400)
+          .json({ message: "Email query parameter is required" });
+      }
+
+      try {
+        const orders = await ordersCollection
+          .find({ userEmail: email })
+          .toArray();
+        res.status(200).json(orders);
+      } catch (err) {
+        console.error("Error fetching orders:", err);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     //await client.close();
