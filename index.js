@@ -89,8 +89,9 @@ async function run() {
       }
 
       try {
+        const options = { sort: { createdAt: -1 } };
         const orders = await ordersCollection
-          .find({ userEmail: email })
+          .find({ userEmail: email }, options)
           .toArray();
         res.status(200).json(orders);
       } catch (err) {
