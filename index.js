@@ -120,6 +120,236 @@ async function run() {
       }
     });
 
+    //**** */
+    // GET single order by id (used by Payment.jsx)
+    app.get("/orders/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const order = await ordersCollection.findOne({ _id: new ObjectId(id) });
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        res.json(order);
+      } catch (err) {
+        console.error("GET /orders/:id error:", err);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+    /**
+     * POST /create-checkout-session
+     * Body: { orderId }
+     * Creates a Stripe Checkout Session for that order and returns { url, id }
+     */
+    // app.post("/create-checkout-session", async (req, res) => {
+    //   try {
+    //     const { orderId } = req.body;
+    //     if (!orderId)
+    //       return res.status(400).json({ message: "orderId required" });
+
+    //     const order = await ordersCollection.findOne({
+    //       _id: new ObjectId(orderId),
+    //     });
+    //     if (!order) return res.status(404).json({ message: "Order not found" });
+
+    //     // require stripe and env key
+    //     const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+    //     const siteDomain = process.env.SITE_DOMAIN || "http://localhost:5173/";
+
+    //     // Price and product details
+    //     // NOTE: Stripe expects amount in smallest currency unit (e.g., cents for USD).
+    //     // If your order.price is in "BDT" (taka) or other currency, adjust currency and amount accordingly.
+    //     // Here I'm assuming price is in USD. If using BDT, change currency:'bdt' and amount accordingly.
+    //     const unitAmount = Math.round((order.price || 0) * 100); // multiply by 100 to convert to cents
+
+    //     const session = await stripe.checkout.sessions.create({
+    //       payment_method_types: ["card"],
+    //       mode: "payment",
+    //       line_items: [
+    //         {
+    //           price_data: {
+    //             currency: "usd", // CHANGE if you want another currency
+    //             product_data: {
+    //               name: order.bookTitle || "Order",
+    //               description: `Order for ${order.bookTitle}`,
+    //             },
+    //             unit_amount: unitAmount,
+    //           },
+    //           quantity: 1,
+    //         },
+    //       ],
+    //       metadata: {
+    //         orderId: String(order._id),
+    //       },
+    //       success_url: `${siteDomain}payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    //       cancel_url: `${siteDomain}payment-cancelled`,
+    //     });
+
+    //     res.json({ url: session.url, id: session.id });
+    //   } catch (err) {
+    //     console.error("POST /create-checkout-session error:", err);
+    //     res.status(500).json({ message: "Failed to create checkout session" });
+    //   }
+    // });
+
+    /**
+     * PATCH /payment-success?session_id=...
+     * This will retrieve Stripe session, confirm payment, and update order in DB.
+     * Returns JSON with transactionId and a generated trackingId.
+     */
+    // app.patch("/payment-success", async (req, res) => {
+    //   try {
+    //     const sessionId = req.query.session_id;
+    //     if (!sessionId)
+    //       return res.status(400).json({ message: "session_id required" });
+
+    //     const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+    //     // Retrieve session including payment_intent
+    //     const session = await stripe.checkout.sessions.retrieve(sessionId, {
+    //       expand: ["payment_intent", "line_items"],
+    //     });
+
+    //     // get metadata orderId
+    //     const orderId = session?.metadata?.orderId;
+    //     if (!orderId) {
+    //       return res
+    //         .status(400)
+    //         .json({ message: "Order ID not found in session metadata" });
+    //     }
+
+    //     // payment intent id as transaction id
+    //     const transactionId = session.payment_intent?.id || session.id;
+
+    //     // Optionally produce a tracking id (simple random)
+    //     const trackingId = `TRK-${Math.random()
+    //       .toString(36)
+    //       .substring(2, 9)
+    //       .toUpperCase()}`;
+
+    //     // update DB: set status/paymentStatus and attach transaction/tracking
+    //     const result = await ordersCollection.updateOne(
+    //       { _id: new ObjectId(orderId) },
+    //       {
+    //         $set: {
+    //           status: "paid",
+    //           paymentStatus: "paid",
+    //           transactionId,
+    //           trackingId,
+    //           paidAt: new Date().toISOString(),
+    //         },
+    //       }
+    //     );
+
+    //     if (result.matchedCount === 0) {
+    //       return res.status(404).json({ message: "Order not found" });
+    //     }
+
+    //     res.json({ transactionId, trackingId });
+    //   } catch (err) {
+    //     console.error("PATCH /payment-success error:", err);
+    //     res.status(500).json({ message: "Failed to process payment success" });
+    //   }
+    // });
+
+    // POST /checkout-session
+
+    app.post("/checkout-session", async (req, res) => {
+      try {
+        const { orderId, userEmail } = req.body;
+        if (!orderId || !userEmail)
+          return res
+            .status(400)
+            .json({ message: "orderId and userEmail required" });
+
+        const order = await ordersCollection.findOne({
+          _id: new ObjectId(orderId),
+        });
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+        const amount = Math.round(Number(order.price) * 100); // cents
+
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: amount,
+                product_data: {
+                  name: order.bookTitle || "Book Order",
+                  description: `Payment for order: ${order.bookTitle}`,
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          mode: "payment",
+          metadata: {
+            orderId: order._id.toString(),
+            bookTitle: order.bookTitle,
+          },
+          customer_email: userEmail,
+          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+
+        res.json({ url: session.url, id: session.id });
+      } catch (err) {
+        console.error("Checkout session error:", err);
+        res
+          .status(500)
+          .json({
+            message: "Failed to create checkout session",
+            error: err.message,
+          });
+      }
+    });
+
+    app.patch("/payment-success", async (req, res) => {
+      try {
+        const sessionId = req.query.session_id;
+        if (!sessionId)
+          return res.status(400).json({ message: "session_id required" });
+
+        const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        if (session.payment_status !== "paid") {
+          return res.json({ success: false, message: "Payment not completed" });
+        }
+
+        const orderId = session.metadata.orderId;
+        const trackingId = `TRK-${Math.random()
+          .toString(36)
+          .substring(2, 9)
+          .toUpperCase()}`;
+
+        await ordersCollection.updateOne(
+          { _id: new ObjectId(orderId) },
+          {
+            $set: {
+              status: "paid",
+              paymentStatus: "paid",
+              transactionId: session.payment_intent,
+              trackingId,
+              paidAt: new Date(),
+            },
+          }
+        );
+
+        res.json({
+          success: true,
+          transactionId: session.payment_intent,
+          trackingId,
+        });
+      } catch (err) {
+        console.error("Payment success error:", err);
+        res
+          .status(500)
+          .json({ message: "Failed to process payment", error: err.message });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
