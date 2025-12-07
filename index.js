@@ -69,6 +69,8 @@ async function run() {
       try {
         const order = req.body;
         order.orderDate = new Date();
+        //order created time
+        order.createdAt = new Date();
         const result = await ordersCollection.insertOne(order);
         res.status(201).json(result);
       } catch (err) {
