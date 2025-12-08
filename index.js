@@ -277,6 +277,54 @@ async function run() {
       }
     });
 
+    //librarians related API
+
+    app.get("/librarians", async (req, res) => {
+      const query = {};
+      if (req.query.status) {
+        query.status = req.query.status;
+      }
+      const cursor = librariansCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.post("/librarians", async (req, res) => {
+      const librarian = req.body;
+      librarian.status = "pending";
+      librarian.createdAt = new Date();
+
+      const result = await librariansCollection.insertOne(librarian);
+      res.send(result);
+    });
+
+    app.patch("/librarians/:id", verifyFBToken, async (req, res) => {
+      const status = req.body.status;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await librariansCollection.updateOne(query, updatedDoc);
+
+      if (status === "approved") {
+        const email = req.body.email;
+        const userQuery = { email };
+        const updateUser = {
+          $set: {
+            role: "librarian",
+          },
+        };
+        const userResult = await usersCollection.updateOne(
+          userQuery,
+          updateUser
+        );
+      }
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
