@@ -56,6 +56,21 @@ async function run() {
     const librariansCollection = db.collection("librarians");
 
     //users related APIs
+    app.get("/users", verifyFBToken, async (req, res) => {
+      const cursor = usersCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/users/:id", async (req, res) => {});
+
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ role: user?.role || "user" });
+    });
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       user.role = "user";
@@ -87,6 +102,19 @@ async function run() {
     app.post("/books", async (req, res) => {
       const book = req.body;
       const result = await booksCollection.insertOne(book);
+      res.send(result);
+    });
+
+    app.patch("/users/:id", async (req, res) => {
+      const id = req.params.id;
+      const roleInfo = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: roleInfo.role,
+        },
+      };
+      const result = usersCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
 
