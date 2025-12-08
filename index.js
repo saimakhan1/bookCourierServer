@@ -53,6 +53,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const booksCollection = db.collection("books");
     const ordersCollection = db.collection("orders");
+    const librariansCollection = db.collection("librarians");
 
     //users related APIs
     app.post("/users", async (req, res) => {
