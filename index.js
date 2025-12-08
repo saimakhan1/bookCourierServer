@@ -50,8 +50,26 @@ async function run() {
     await client.connect();
 
     const db = client.db("book_courier_db");
+    const usersCollection = db.collection("users");
     const booksCollection = db.collection("books");
     const ordersCollection = db.collection("orders");
+
+    //users related APIs
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      user.role = "user";
+      user.createdAt = new Date();
+      const email = user.email;
+
+      const userExists = await usersCollection.findOne({ email });
+
+      if (userExists) {
+        return res.send({ message: "user exists" });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
 
     //parcel API
     // app.get("/books", async (req, res) => {});
