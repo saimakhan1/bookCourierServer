@@ -54,6 +54,8 @@ async function run() {
     const booksCollection = db.collection("books");
     const ordersCollection = db.collection("orders");
     const librariansCollection = db.collection("librarians");
+    const reviewsCollection = db.collection("reviews");
+    const wishlistsCollection = db.collection("wishlists");
 
     //middleware with database access
     //verify admin before allowing admin activity
@@ -286,6 +288,7 @@ async function run() {
           status = "published",
           publicationDate,
           description = "",
+          librarianName,
         } = req.body;
 
         if (!title || !author) {
@@ -304,6 +307,7 @@ async function run() {
           createdAt: new Date(),
           publicationDate: publicationDate ? new Date(publicationDate) : null,
           description,
+          librarianName,
         };
 
         const result = await booksCollection.insertOne(book);
@@ -315,6 +319,7 @@ async function run() {
           .json({ message: "Failed to add book", error: err.message });
       }
     });
+
     app.patch(
       "/users/:id/role",
       verifyFBToken,
@@ -483,6 +488,234 @@ async function run() {
         res.status(500).json({ message: "Internal Server Error" });
       }
     });
+
+    //Reviews Related API
+    app.post("/reviews", verifyFBToken, async (req, res) => {
+      try {
+        const { bookId, rating, review } = req.body;
+        const userEmail = req.decoded_email;
+
+        if (!bookId || !rating || !review) {
+          return res
+            .status(400)
+            .json({ message: "bookId, rating, and review required" });
+        }
+
+        // Check if user has ordered this book
+        const order = await ordersCollection.findOne({
+          bookId,
+          userEmail,
+          status: "paid", // only allow review if book is purchased
+        });
+
+        if (!order) {
+          return res
+            .status(403)
+            .json({ message: "You can only review purchased books" });
+        }
+
+        const reviewDoc = {
+          bookId,
+          userEmail,
+          userName: req.body.userName || "", // optionally store name
+          rating: Number(rating),
+          review,
+          createdAt: new Date(),
+        };
+
+        const result = await reviewsCollection.insertOne(reviewDoc);
+        res.status(201).json(result);
+      } catch (err) {
+        console.error("POST /reviews error:", err);
+        res
+          .status(500)
+          .json({ message: "Failed to add review", error: err.message });
+      }
+    });
+
+    app.get("/reviews/:bookId", async (req, res) => {
+      try {
+        const bookId = req.params.bookId;
+        const reviews = await reviewsCollection
+          .find({ bookId })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.status(200).json(reviews);
+      } catch (err) {
+        console.error("GET /reviews/:bookId error:", err);
+        res.status(500).json({ message: "Failed to fetch reviews" });
+      }
+    });
+
+    //wish list related API
+
+    // Add book to wishlist
+    // Add book to wishlist
+    app.post("/wishlist", verifyFBToken, async (req, res) => {
+      try {
+        const { bookId } = req.body;
+        const userEmail = req.decoded_email;
+
+        if (!bookId) {
+          return res.status(400).json({ message: "bookId is required" });
+        }
+
+        const { ObjectId } = require("mongodb");
+        const bookObjId = new ObjectId(bookId); // convert string to ObjectId
+
+        // Check if already in wishlist
+        const exists = await wishlistsCollection.findOne({
+          userEmail,
+          bookId: bookObjId,
+        });
+        if (exists) {
+          return res.status(400).json({ message: "Book already in wishlist" });
+        }
+
+        const wishlistItem = {
+          userEmail,
+          bookId: bookObjId,
+          createdAt: new Date(),
+        };
+
+        const result = await wishlistsCollection.insertOne(wishlistItem);
+        res.status(201).json({ message: "Book added to wishlist", result });
+      } catch (err) {
+        console.error("POST /wishlist error:", err);
+        res
+          .status(500)
+          .json({ message: "Failed to add to wishlist", error: err.message });
+      }
+    });
+
+    // Get wishlist for user
+    app.get("/wishlist", verifyFBToken, async (req, res) => {
+      try {
+        const userEmail = req.decoded_email;
+
+        // Get wishlist items with book details
+        const wishlistItems = await wishlistsCollection
+          .aggregate([
+            { $match: { userEmail } },
+            {
+              $lookup: {
+                from: "books",
+                localField: "bookId",
+                foreignField: "_id",
+                as: "bookDetails",
+              },
+            },
+            { $unwind: "$bookDetails" },
+            { $sort: { createdAt: -1 } },
+          ])
+          .toArray();
+
+        res.status(200).json(wishlistItems);
+      } catch (err) {
+        console.error("GET /wishlist error:", err);
+        res
+          .status(500)
+          .json({ message: "Failed to fetch wishlist", error: err.message });
+      }
+    });
+
+    // Remove book from wishlist
+    app.delete("/wishlist/:bookId", verifyFBToken, async (req, res) => {
+      try {
+        const userEmail = req.decoded_email;
+        const bookId = req.params.bookId;
+
+        const result = await wishlistsCollection.deleteOne({
+          userEmail,
+          bookId,
+        });
+        res.status(200).json({
+          message: "Removed from wishlist",
+          deletedCount: result.deletedCount,
+        });
+      } catch (err) {
+        console.error("DELETE /wishlist/:bookId error:", err);
+        res.status(500).json({
+          message: "Failed to remove from wishlist",
+          error: err.message,
+        });
+      }
+    });
+
+    // add librarian action added ***imp
+
+    // Make user a librarian
+    app.patch(
+      "/users/:id/librarian",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        try {
+          const query = { _id: new ObjectId(id) };
+          const updatedDoc = { $set: { role: "librarian" } };
+          const result = await usersCollection.updateOne(query, updatedDoc);
+
+          res.send(result);
+        } catch (err) {
+          console.error(err);
+          res
+            .status(500)
+            .send({ message: "Failed to update role to librarian" });
+        }
+      }
+    );
+
+    // UPDATE BOOK (EDIT BOOK) - Librarian can edit only their own books
+    app.patch(
+      "/books/:id",
+      verifyFBToken,
+      verifyLibrarian,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const email = req.decoded_email; // logged-in librarian
+          const updatedBook = req.body;
+
+          // Only allow librarian to update their own book
+          const filter = { _id: new ObjectId(id), ownerEmail: email };
+
+          const updateDoc = {
+            $set: {
+              title: updatedBook.title,
+              author: updatedBook.author,
+              category: updatedBook.category,
+              price: updatedBook.price,
+              cover: updatedBook.cover || updatedBook.image,
+              description: updatedBook.description,
+              status: updatedBook.status,
+              updatedAt: new Date(),
+            },
+          };
+
+          const result = await booksCollection.updateOne(filter, updateDoc);
+
+          if (result.matchedCount === 0) {
+            return res.status(403).send({
+              success: false,
+              message: "You are not allowed to edit this book",
+            });
+          }
+
+          res.send({
+            success: true,
+            message: "Book updated successfully",
+            result,
+          });
+        } catch (err) {
+          console.error(err);
+          res.status(500).send({
+            success: false,
+            message: "Failed to update the book",
+          });
+        }
+      }
+    );
 
     //**** */
     // GET single order by id (used by Payment.jsx)
