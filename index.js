@@ -129,24 +129,70 @@ async function run() {
       res.send(result);
     });
 
-    //parcel API
+    //Books Related  API
     // app.get("/books", async (req, res) => {});
-    app.get("/books", async (req, res) => {
-      try {
-        const books = await booksCollection.find({}).toArray(); // get all books
-        res.status(200).json(books);
-      } catch (error) {
-        console.error("Error fetching books:", error);
-        res.status(500).send("Internal Server Error");
-      }
-    });
+    // app.get("/books", async (req, res) => {
+    //   try {
+    //     const books = await booksCollection.find({}).toArray(); // get all books
+    //     res.status(200).json(books);
+    //   } catch (error) {
+    //     console.error("Error fetching books:", error);
+    //     res.status(500).send("Internal Server Error");
+    //   }
+    // });
 
-    app.post("/books", async (req, res) => {
-      const book = req.body;
-      const result = await booksCollection.insertOne(book);
+    // GET /books -> only published books shown by default
+    // Get ALL books (for public AllBooks page)
+    app.get("/books", async (req, res) => {
+      const result = await booksCollection.find().toArray();
       res.send(result);
     });
 
+    // app.post("/books", async (req, res) => {
+    //   const book = req.body;
+    //   const result = await booksCollection.insertOne(book);
+    //   res.send(result);
+    // });
+
+    // POST /books -> simple JSON, librarian only
+    app.post("/books", verifyFBToken, verifyLibrarian, async (req, res) => {
+      try {
+        const ownerEmail = req.decoded_email;
+        const {
+          title,
+          author,
+          price = 0,
+          cover = "",
+          status = "published",
+          publicationDate,
+        } = req.body;
+
+        if (!title || !author) {
+          return res
+            .status(400)
+            .json({ message: "title and author are required" });
+        }
+
+        const book = {
+          title,
+          author,
+          price: Number(price) || 0,
+          cover, // expects image URL string
+          status: status === "published" ? "published" : "unpublished",
+          ownerEmail,
+          createdAt: new Date(),
+          publicationDate: publicationDate ? new Date(publicationDate) : null,
+        };
+
+        const result = await booksCollection.insertOne(book);
+        res.status(201).json({ insertedId: result.insertedId });
+      } catch (err) {
+        console.error("POST /books error:", err);
+        res
+          .status(500)
+          .json({ message: "Failed to add book", error: err.message });
+      }
+    });
     app.patch(
       "/users/:id/role",
       verifyFBToken,
@@ -180,15 +226,89 @@ async function run() {
       }
     });
 
+    //MyBooks related API for the Librarians
+
+    // GET /my-books
+    // - secure: requires verifyFBToken and verifyLibrarian
+    // - returns books where ownerEmail === req.decoded_email
+    app.get("/my-books", verifyFBToken, verifyLibrarian, async (req, res) => {
+      try {
+        const librarianEmail = req.decoded_email;
+        if (!librarianEmail) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const query = { ownerEmail: librarianEmail };
+        const books = await booksCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.status(200).json(books);
+      } catch (err) {
+        console.error("GET /my-books error:", err);
+        res
+          .status(500)
+          .json({ message: "Failed to fetch my books", error: err.message });
+      }
+    });
+
+    //for the librarians dashboard, librariansOrders related API
+
+    app.get("/librarian-orders", async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        return res.status(400).send({ error: "Email is required" });
+      }
+
+      const orders = await ordersCollection
+        .find({ librarianEmail: email })
+        .sort({ orderDate: -1 })
+        .toArray();
+
+      res.send(orders);
+    });
+
     //orders related API
+
+    // app.post("/orders", async (req, res) => {
+    //   try {
+    //     const order = req.body;
+    //     order.orderDate = new Date();
+    //     //order created time
+    //     order.createdAt = new Date();
+    //     const result = await ordersCollection.insertOne(order);
+    //     res.status(201).json(result);
+    //   } catch (err) {
+    //     console.error(err);
+    //     res.status(500).json({ message: "Failed to place order" });
+    //   }
+    // });
 
     app.post("/orders", async (req, res) => {
       try {
         const order = req.body;
+
+        // Set timestamps (keep your existing logic)
         order.orderDate = new Date();
-        //order created time
         order.createdAt = new Date();
+
+        // Get the book info to attach librarianEmail
+        const book = await booksCollection.findOne({
+          _id: new ObjectId(order.bookId),
+        });
+
+        if (!book) {
+          return res.status(404).json({ message: "Book not found" });
+        }
+
+        // Attach librarianEmail from the book
+        // order.librarianEmail = book.librarianEmail;
+        order.librarianEmail = book.ownerEmail;
+
+        // Insert the order
         const result = await ordersCollection.insertOne(order);
+
         res.status(201).json(result);
       } catch (err) {
         console.error(err);
