@@ -55,9 +55,38 @@ async function run() {
     const ordersCollection = db.collection("orders");
     const librariansCollection = db.collection("librarians");
 
+    //middleware with database access
+    //verify admin before allowing admin activity
+    //must be used after verifyFBToken middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     //users related APIs
     app.get("/users", verifyFBToken, async (req, res) => {
-      const cursor = usersCollection.find();
+      const searchText = req.query.searchText;
+
+      const query = {};
+      if (searchText) {
+        //query.displayName = searchText;
+        //query.name = searchText;
+        // query.name = { $regex: searchText, $options: "i" };
+        query.$or = [
+          { name: { $regex: searchText, $options: "i" } },
+          { email: { $regex: searchText, $options: "i" } },
+        ];
+      }
+      const cursor = usersCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .limit(15);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -105,18 +134,23 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/users/:id", async (req, res) => {
-      const id = req.params.id;
-      const roleInfo = req.body;
-      const query = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          role: roleInfo.role,
-        },
-      };
-      const result = usersCollection.updateOne(query, updatedDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/users/:id/role",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const roleInfo = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            role: roleInfo.role,
+          },
+        };
+        const result = usersCollection.updateOne(query, updatedDoc);
+        res.send(result);
+      }
+    );
 
     // Get single book by ID
     app.get("/books/:id", async (req, res) => {
