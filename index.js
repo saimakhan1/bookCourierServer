@@ -113,17 +113,55 @@ async function run() {
       res.send({ role: user?.role || "user" });
     });
 
+    //user record storage *** imp
+    // app.post("/users", async (req, res) => {
+    //   const user = req.body;
+    //   user.role = "user";
+    //   user.createdAt = new Date();
+    //   const email = user.email;
+
+    //   const userExists = await usersCollection.findOne({ email });
+
+    //   if (userExists) {
+    //     return res.send({ message: "user exists" });
+    //   }
+
+    //   const result = await usersCollection.insertOne(user);
+    //   res.send(result);
+    // });
+
+    //user record storage *** imp
+
     app.post("/users", async (req, res) => {
-      const user = req.body;
-      user.role = "user";
-      user.createdAt = new Date();
-      const email = user.email;
+      const { email, name, photoURL } = req.body;
+
+      if (!email) return res.status(400).send({ message: "Email required" });
 
       const userExists = await usersCollection.findOne({ email });
-
       if (userExists) {
         return res.send({ message: "user exists" });
       }
+
+      const user = {
+        email,
+        name: name, // store displayName as name
+
+        photoURL: photoURL, // default avatar
+        role: "user",
+        createdAt: new Date(),
+      };
+
+      //update user collection **imp
+      await usersCollection.updateMany({ name: { $exists: false } }, [
+        {
+          $set: {
+            name: "$displayName",
+            photoURL: {
+              $ifNull: ["$photoURL", "https://i.ibb.co/2FsfXqM/user.png"],
+            },
+          },
+        },
+      ]);
 
       const result = await usersCollection.insertOne(user);
       res.send(result);
@@ -165,6 +203,7 @@ async function run() {
           cover = "",
           status = "published",
           publicationDate,
+          description = "",
         } = req.body;
 
         if (!title || !author) {
@@ -182,6 +221,7 @@ async function run() {
           ownerEmail,
           createdAt: new Date(),
           publicationDate: publicationDate ? new Date(publicationDate) : null,
+          description,
         };
 
         const result = await booksCollection.insertOne(book);
