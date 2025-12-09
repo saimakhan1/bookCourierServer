@@ -69,6 +69,19 @@ async function run() {
       next();
     };
 
+    //verify Librarian
+
+    const verifyLibrarian = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "librarian") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     //users related APIs
     app.get("/users", verifyFBToken, async (req, res) => {
       const searchText = req.query.searchText;
