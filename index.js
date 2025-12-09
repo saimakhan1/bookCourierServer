@@ -181,9 +181,91 @@ async function run() {
 
     // GET /books -> only published books shown by default
     // Get ALL books (for public AllBooks page)
+    // app.get("/books", async (req, res) => {
+    //   const result = await booksCollection.find().toArray();
+    //   res.send(result);
+
+    // });
+
+    // user Management portion
     app.get("/books", async (req, res) => {
-      const result = await booksCollection.find().toArray();
-      res.send(result);
+      try {
+        // return only published books for public listing
+        const books = await booksCollection
+          .find({ status: "published" })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(books);
+      } catch (err) {
+        console.error("GET /books error:", err);
+        res.status(500).send({ message: "Failed to load books" });
+      }
+    });
+
+    //user Management portions
+    // 1) Admin: get all books (published + unpublished)
+    app.get("/admin/books", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const books = await booksCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(books);
+      } catch (err) {
+        console.error("GET /admin/books error:", err);
+        res.status(500).send({ message: "Failed to load books" });
+      }
+    });
+
+    // 2) Admin: change book status (publish/unpublish)
+    app.patch(
+      "/books/status/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const { status } = req.body;
+          if (!["published", "unpublished"].includes(status)) {
+            return res.status(400).send({ message: "Invalid status" });
+          }
+
+          const result = await booksCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status } }
+          );
+          res.send(result);
+        } catch (err) {
+          console.error("PATCH /books/status/:id error:", err);
+          res.status(500).send({ message: "Failed to update book status" });
+        }
+      }
+    );
+
+    // 3) Admin: delete a book AND delete related orders
+    app.delete("/books/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        // delete the book
+        const deleteBook = await booksCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        // safe delete of orders related to this book:
+        // handle both string stored bookId or ObjectId stored as string
+        const deleteOrders = await ordersCollection.deleteMany({
+          $or: [{ bookId: id }, { bookId: new ObjectId(id) }],
+        });
+
+        res.send({
+          deletedBook: deleteBook,
+          deletedOrders: deleteOrders,
+        });
+      } catch (err) {
+        console.error("DELETE /books/:id error:", err);
+        res.status(500).send({ message: "Failed to delete book" });
+      }
     });
 
     // app.post("/books", async (req, res) => {
