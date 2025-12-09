@@ -116,23 +116,6 @@ async function run() {
     });
 
     //user record storage *** imp
-    // app.post("/users", async (req, res) => {
-    //   const user = req.body;
-    //   user.role = "user";
-    //   user.createdAt = new Date();
-    //   const email = user.email;
-
-    //   const userExists = await usersCollection.findOne({ email });
-
-    //   if (userExists) {
-    //     return res.send({ message: "user exists" });
-    //   }
-
-    //   const result = await usersCollection.insertOne(user);
-    //   res.send(result);
-    // });
-
-    //user record storage *** imp
 
     app.post("/users", async (req, res) => {
       const { email, name, photoURL } = req.body;
@@ -169,26 +152,6 @@ async function run() {
       res.send(result);
     });
 
-    //Books Related  API
-    // app.get("/books", async (req, res) => {});
-    // app.get("/books", async (req, res) => {
-    //   try {
-    //     const books = await booksCollection.find({}).toArray(); // get all books
-    //     res.status(200).json(books);
-    //   } catch (error) {
-    //     console.error("Error fetching books:", error);
-    //     res.status(500).send("Internal Server Error");
-    //   }
-    // });
-
-    // GET /books -> only published books shown by default
-    // Get ALL books (for public AllBooks page)
-    // app.get("/books", async (req, res) => {
-    //   const result = await booksCollection.find().toArray();
-    //   res.send(result);
-
-    // });
-
     // user Management portion
     app.get("/books", async (req, res) => {
       try {
@@ -205,7 +168,7 @@ async function run() {
     });
 
     //user Management portions
-    // 1) Admin: get all books (published + unpublished)
+    // get all books (published and unpublished) by admin
     app.get("/admin/books", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const books = await booksCollection
@@ -219,7 +182,7 @@ async function run() {
       }
     });
 
-    // 2) Admin: change book status (publish/unpublish)
+    //  change book status (publish/unpublished) by admin
     app.patch(
       "/books/status/:id",
       verifyFBToken,
@@ -244,7 +207,7 @@ async function run() {
       }
     );
 
-    // 3) Admin: delete a book AND delete related orders
+    // 3) Admin: delete a book and delete related orders
     app.delete("/books/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const id = req.params.id;
@@ -254,8 +217,7 @@ async function run() {
           _id: new ObjectId(id),
         });
 
-        // safe delete of orders related to this book:
-        // handle both string stored bookId or ObjectId stored as string
+        //delete orders
         const deleteOrders = await ordersCollection.deleteMany({
           $or: [{ bookId: id }, { bookId: new ObjectId(id) }],
         });
@@ -355,9 +317,6 @@ async function run() {
 
     //MyBooks related API for the Librarians
 
-    // GET /my-books
-    // - secure: requires verifyFBToken and verifyLibrarian
-    // - returns books where ownerEmail === req.decoded_email
     app.get("/my-books", verifyFBToken, verifyLibrarian, async (req, res) => {
       try {
         const librarianEmail = req.decoded_email;
