@@ -246,7 +246,7 @@ async function run() {
     //   res.send(result);
     // });
 
-    // POST /books -> simple JSON, librarian only
+    // POST /books ->
     app.post("/books", verifyFBToken, verifyLibrarian, async (req, res) => {
       try {
         const ownerEmail = req.decoded_email;
@@ -364,20 +364,6 @@ async function run() {
     });
 
     //orders related API
-
-    // app.post("/orders", async (req, res) => {
-    //   try {
-    //     const order = req.body;
-    //     order.orderDate = new Date();
-    //     //order created time
-    //     order.createdAt = new Date();
-    //     const result = await ordersCollection.insertOne(order);
-    //     res.status(201).json(result);
-    //   } catch (err) {
-    //     console.error(err);
-    //     res.status(500).json({ message: "Failed to place order" });
-    //   }
-    // });
 
     app.post("/orders", async (req, res) => {
       try {
@@ -633,7 +619,7 @@ async function run() {
       }
     );
 
-    // UPDATE BOOK (EDIT BOOK) - Librarian can edit only their own books
+    // Update book - edit book - Librarian can edit only their own books
     app.patch(
       "/books/:id",
       verifyFBToken,
