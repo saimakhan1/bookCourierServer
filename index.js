@@ -828,6 +828,18 @@ async function run() {
       res.send(result);
     });
 
+    //**r *// remove librarian issue
+    app.patch("/users/:id/librarian/remove", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role: "user" } }
+      );
+
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     //The below has been commented to deploy in vercel
     // await client.db("admin").command({ ping: 1 });
